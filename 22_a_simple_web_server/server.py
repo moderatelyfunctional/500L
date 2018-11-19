@@ -1,4 +1,9 @@
+import os
 import http.server
+
+class ServerException(Exception):
+	'''For internal error reporting.'''
+	pass
 
 '''
 BaseHTTPRequestHandler parses incoming HTTP requests and calls 
@@ -26,26 +31,57 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 		</html>
 	'''
 
-	def create_page(self):
-		values = {
-			'date_time'   : self.date_time_string(),
-			'client_host' : self.client_address[0],
-			'client_port' : self.client_address[1],
-			'command'     : self.command,
-			'path'        : self.path
-		}
+	Error_Page = '''\
+		<html>
+			<body>
+				<h1>Error accessing {path}</h1>
+				<p>{msg}</p>
+			</body>
+		</html>
+	'''
 
-	def send_page(self, page):
-		self.send_response(200)
+	def send_content(self, content, status=200):
+		self.send_response(status)
 		self.send_header("Content-Type", "text/html")
-		self.send_header("Content-Length", str(len(self.Page)))
+		self.send_header("Content-Length", str(len(content)))
 		self.end_headers()
-		self.wfile.write(self.Page.encode('utf-8')) # Strings in Python3 are Unicode so have to convert to binary
+		self.wfile.write(content) # Strings in Python3 are Unicode so have to convert to binary
+
+	def handle_file(self, absolute_path):
+		try:
+			with open(absolute_path, 'rb') as reader: # reading the file as binary
+				content = reader.read() # for GB sized data (videos), consider streaming data
+			self.send_content(content)
+		except IOError as msg:
+			msg = "'{0}' cannot be read: {1}".format(self.path, msg)
+			self.handle_error(msg)
+
+	def handle_error(self, msg):
+		content = self.Error_Page.format(path = self.path, msg = msg).encode('utf-8')
+		self.send_content(content, 404)
 
 	# Handles a GET request
 	def do_GET(self):
-		page = self.create_page()
-		self.send_page(page)
+		try:
+
+			# figure out what exactly is being requested
+			absolute_path = os.getcwd() + self.path
+
+			# if it doesn't exist...
+			if not os.path.exists(absolute_path):
+				raise ServerException("'{0}' not found".format(self.path))
+
+			# ...it's a file...
+			elif os.path.isfile(absolute_path):
+				self.handle_file(absolute_path)
+
+			# ...it's something else
+			else:
+				raise ServerException("Unknown object '{0}'".format(self.path))
+
+		# handle errors
+		except Exception as msg:
+			self.handle_error(msg)
 
 if __name__ == '__main__':
 	serverAddress = ('', 8080) # run on the current machine with port 8080
