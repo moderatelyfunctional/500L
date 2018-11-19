@@ -6,7 +6,46 @@ class ServerException(Exception):
 	'''For internal error reporting.'''
 	pass
 
-class case_no_file(object):
+
+class base_case(object):
+	'''Parent class for case handlers.'''
+
+	def handle_file(self, handler, absolute_path):
+		try:
+			with open(absolute_path, 'rb') as reader: # reading the file as binary
+				content = reader.read() # for GB sized data (videos), consider streaming data
+			handler.send_content(content)
+		except IOError as msg:
+			msg = "'{0}' cannot be read: {1}".format(self.path, msg)
+			self.handle_error(msg)
+
+	def list_dir(self, handler, absolute_path):
+		try:
+			entries = os.listdir(absolute_path)
+			bullets = ['<li>{0}</li>'.format(e) for e in entries 
+					   if not e.startswith('.')]
+			page = handler.Listing_Page.format('\n'.join(bullets)).encode('utf-8')
+			handler.send_content(page)
+		except OSError as msg:
+			msg = "'{0}' cannot be listed: {1}".format(self.path, msg)
+			self.handle_error(msg)
+
+	def run_cgi(self, handler, absolute_path):
+		cmd = ['python', absolute_path]
+		p = subprocess.Popen(cmd, stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+		output, err = p.communicate()
+		handler.send_content(output)
+
+	def index_path(self, handler):
+		return os.path.join(handler.absolute_path, 'index.html')
+
+	def test(self, handler):
+		assert False, 'Not Implemented.'
+
+	def act(self, handler):
+		assert False, 'Not Implemented.'
+
+class case_no_file(base_case):
 	'''File or directory does not exist.'''
 
 	def test(self, handler):
@@ -15,42 +54,36 @@ class case_no_file(object):
 	def act(self, handler):
 		raise ServerException("'{0}' not found".format(handler.path))
 
-class case_existing_file(object):
+class case_existing_file(base_case):
 	'''File exists.'''
 
 	def test(self, handler):
 		return os.path.isfile(handler.absolute_path)
 
 	def act(self, handler):
-		handler.handle_file(handler.absolute_path)
+		self.handle_file(handler, handler.absolute_path)
 
-class case_directory_index_file(object):
+class case_directory_index_file(base_case):
 	'''Server index.html page for a directory.'''
-
-	def index_path(self, handler):
-		return os.path.join(handler.absolute_path, 'index.html')
 
 	def test(self, handler):
 		return os.path.isdir(handler.absolute_path) and \
 			   os.path.isfile(self.index_path(handler))
 
 	def act(self, handler):
-		handler.handle_file(self.index_path(handler))
+		self.handle_file(handler, self.index_path(handler))
 
-class case_directory_no_index_file(object):
+class case_directory_no_index_file(base_case):
 	'''Serve listing for a directory without an index.html page.'''
-
-	def index_path(self, handler):
-		return os.path.join(handler.absolute_path, 'index.html')
 
 	def test(self, handler):
 		return os.path.isdir(handler.absolute_path) and \
 			   not os.path.isfile(self.index_path(handler))
 
 	def act(self, handler):
-		handler.list_dir(handler.absolute_path)
+		self.list_dir(handler, handler.absolute_path)
 
-class case_cgi_file(object):
+class case_cgi_file(base_case):
 	'''Something executable.'''
 
 	def test(self, handler):
@@ -58,9 +91,9 @@ class case_cgi_file(object):
 			   handler.absolute_path.endswith('.py')
 
 	def act(self, handler):
-		handler.run_cgi(handler.absolute_path)
+		self.run_cgi(handler, handler.absolute_path)
 
-class case_always_fail(object):
+class case_always_fail(base_case):
 	'''Base case if nothing else worked.'''
 
 	def test(self, handler):
@@ -112,32 +145,6 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 		self.send_header("Content-Length", str(len(content)))
 		self.end_headers()
 		self.wfile.write(content) # Strings in Python3 are Unicode so have to convert to binary
-
-	def handle_file(self, absolute_path):
-		try:
-			with open(absolute_path, 'rb') as reader: # reading the file as binary
-				content = reader.read() # for GB sized data (videos), consider streaming data
-			self.send_content(content)
-		except IOError as msg:
-			msg = "'{0}' cannot be read: {1}".format(self.path, msg)
-			self.handle_error(msg)
-
-	def list_dir(self, absolute_path):
-		try:
-			entries = os.listdir(absolute_path)
-			bullets = ['<li>{0}</li>'.format(e) for e in entries 
-					   if not e.startswith('.')]
-			page = self.Listing_Page.format('\n'.join(bullets)).encode('utf-8')
-			self.send_content(page)
-		except OSError as msg:
-			msg = "'{0}' cannot be listed: {1}".format(self.path, msg)
-			self.handle_error(msg)
-
-	def run_cgi(self, absolute_path):
-		cmd = ['python', absolute_path]
-		p = subprocess.Popen(cmd, stdin=subprocess.PIPE,stdout=subprocess.PIPE)
-		output, err = p.communicate()
-		self.send_content(output)
 
 	def handle_error(self, msg):
 		content = self.Error_Page.format(path = self.path, msg = msg).encode('utf-8')
