@@ -5,6 +5,33 @@ class ServerException(Exception):
 	'''For internal error reporting.'''
 	pass
 
+class case_no_file(object):
+	'''File or directory does not exist.'''
+
+	def test(self, handler):
+		return not os.path.exists(handler.absolute_path)
+
+	def act(self, handler):
+		raise ServerException("'{0}' not found".format(handler.absolute_path))
+
+class case_existing_file(object):
+	'''File exists.'''
+
+	def test(self, handler):
+		return os.path.isfile(handler.absolute_path)
+
+	def act(self, handler):
+		handler.handle_file(handler.absolute_path)
+
+class case_always_fail(object):
+	'''Base case if nothing else worked.'''
+
+	def test(self, handler):
+		return True
+
+	def act(self, handler):
+		raise ServerException("Unknown object '{0}'".format(handler.path))
+
 '''
 BaseHTTPRequestHandler parses incoming HTTP requests and calls 
 do_x where x in (GET|POST|PUT).
@@ -13,23 +40,14 @@ Overriding the appropriate do_x function calls that function instead
 for the given HTTP request.
 '''
 class RequestHandler(http.server.BaseHTTPRequestHandler):
-	'''Handles HTTP requests by returning a fixed 'page'.'''
-
-	# Page to send back
-	Page = '''\
-		<html>
-			<body>
-				<table>
-					<tr> <td>Header</td>      <td>Value</td>          </tr>
-					<tr> <td>Date</td>        <td>{date_time}</td>    </tr>
-					<tr> <td>Client Host</td> <td>{client_host}</td>  </tr>
-					<tr> <td>Client Port</td> <td>{client_port}s</td> </tr>
-					<tr> <td>Command</td>     <td>{command}</td>      </tr>
-					<tr> <td>Path</td>        <td>{path}</td>         </tr>
-				</table>
-			</body>
-		</html>
 	'''
+	If the requested path maps to a file, that file is served.
+	If anything goes wrong, an error page is constructed.
+	'''
+
+	Cases = [case_no_file(),
+			 case_existing_file(),
+			 case_always_fail()]
 
 	Error_Page = '''\
 		<html>
@@ -64,23 +82,18 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 	def do_GET(self):
 		try:
 
-			# figure out what exactly is being requested
-			absolute_path = os.getcwd() + self.path
+			# figure out what exactly is being requested.
+			self.absolute_path = os.getcwd() + self.path
 
-			# if it doesn't exist...
-			if not os.path.exists(absolute_path):
-				raise ServerException("'{0}' not found".format(self.path))
+			# figure out how to handle it
+			for case in self.Cases: # for loop replaces a series of if statements
+				handler = case()
+				if handler.test(self):
+					handler.act(self)
+					break
 
-			# ...it's a file...
-			elif os.path.isfile(absolute_path):
-				self.handle_file(absolute_path)
-
-			# ...it's something else
-			else:
-				raise ServerException("Unknown object '{0}'".format(self.path))
-
-		# handle errors
-		except Exception as msg:
+		# handle exceptions
+		except Eception as msg:
 			self.handle_error(msg)
 
 if __name__ == '__main__':
