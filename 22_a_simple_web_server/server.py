@@ -12,7 +12,7 @@ class case_no_file(object):
 		return not os.path.exists(handler.absolute_path)
 
 	def act(self, handler):
-		raise ServerException("'{0}' not found".format(handler.absolute_path))
+		raise ServerException("'{0}' not found".format(handler.path))
 
 class case_existing_file(object):
 	'''File exists.'''
@@ -87,13 +87,12 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
 			# figure out how to handle it
 			for case in self.Cases: # for loop replaces a series of if statements
-				handler = case()
-				if handler.test(self):
-					handler.act(self)
+				if case.test(self):
+					case.act(self)
 					break
 
 		# handle exceptions
-		except Eception as msg:
+		except Exception as msg:
 			self.handle_error(msg)
 
 if __name__ == '__main__':
