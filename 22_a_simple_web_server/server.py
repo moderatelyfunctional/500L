@@ -1,4 +1,5 @@
 import os
+import subprocess
 import http.server
 
 class ServerException(Exception):
@@ -49,6 +50,16 @@ class case_directory_no_index_file(object):
 	def act(self, handler):
 		handler.list_dir(handler.absolute_path)
 
+class case_cgi_file(object):
+	'''Something executable.'''
+
+	def test(self, handler):
+		return os.path.isfile(handler.absolute_path) and \
+			   handler.absolute_path.endswith('.py')
+
+	def act(self, handler):
+		handler.run_cgi(handler.absolute_path)
+
 class case_always_fail(object):
 	'''Base case if nothing else worked.'''
 
@@ -72,6 +83,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 	'''
 
 	Cases = [case_no_file(),
+			 case_cgi_file(),
 			 case_existing_file(),
 			 case_directory_index_file(),
 			 case_directory_no_index_file(),
@@ -120,6 +132,12 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 		except OSError as msg:
 			msg = "'{0}' cannot be listed: {1}".format(self.path, msg)
 			self.handle_error(msg)
+
+	def run_cgi(self, absolute_path):
+		cmd = ['python', absolute_path]
+		p = subprocess.Popen(cmd, stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+		output, err = p.communicate()
+		self.send_content(output)
 
 	def handle_error(self, msg):
 		content = self.Error_Page.format(path = self.path, msg = msg).encode('utf-8')
