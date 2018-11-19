@@ -23,6 +23,32 @@ class case_existing_file(object):
 	def act(self, handler):
 		handler.handle_file(handler.absolute_path)
 
+class case_directory_index_file(object):
+	'''Server index.html page for a directory.'''
+
+	def index_path(self, handler):
+		return os.path.join(handler.absolute_path, 'index.html')
+
+	def test(self, handler):
+		return os.path.isdir(handler.absolute_path) and \
+			   os.path.isfile(self.index_path(handler))
+
+	def act(self, handler):
+		handler.handle_file(self.index_path(handler))
+
+class case_directory_no_index_file(object):
+	'''Serve listing for a directory without an index.html page.'''
+
+	def index_path(self, handler):
+		return os.path.join(handler.absolute_path, 'index.html')
+
+	def test(self, handler):
+		return os.path.isdir(handler.absolute_path) and \
+			   not os.path.isfile(self.index_path(handler))
+
+	def act(self, handler):
+		handler.list_dir(handler.absolute_path)
+
 class case_always_fail(object):
 	'''Base case if nothing else worked.'''
 
@@ -47,7 +73,17 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 
 	Cases = [case_no_file(),
 			 case_existing_file(),
+			 case_directory_index_file(),
+			 case_directory_no_index_file(),
 			 case_always_fail()]
+
+	Listing_Page = '''\
+		<html>
+			<body>
+				<ul>{0}</ul>
+			</body>
+		</html>
+	'''
 
 	Error_Page = '''\
 		<html>
@@ -72,6 +108,17 @@ class RequestHandler(http.server.BaseHTTPRequestHandler):
 			self.send_content(content)
 		except IOError as msg:
 			msg = "'{0}' cannot be read: {1}".format(self.path, msg)
+			self.handle_error(msg)
+
+	def list_dir(self, absolute_path):
+		try:
+			entries = os.listdir(absolute_path)
+			bullets = ['<li>{0}</li>'.format(e) for e in entries 
+					   if not e.startswith('.')]
+			page = self.Listing_Page.format('\n'.join(bullets)).encode('utf-8')
+			self.send_content(page)
+		except OSError as msg:
+			msg = "'{0}' cannot be listed: {1}".format(self.path, msg)
 			self.handle_error(msg)
 
 	def handle_error(self, msg):
