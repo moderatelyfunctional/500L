@@ -8,8 +8,10 @@ class DBDB(object):
 		self._assert_not_closed()
 		return self._tree.get(key)
 
+	def commit(self):
+		self._assert_not_closed()
+		self._tree.commit()
+
 	def _assert_not_closed(self):
 		if self._storage.closed:
 			raise ValueError('Database closed.')
-
-	
