@@ -43,17 +43,12 @@ class Interpreter:
 		for each_step in instructions:
 			instruction, argument = each_step # argument is an instruction specific index
 			argument = self.parse_argument(instruction, argument, what_to_execute) # argument is now an instruction parameter
-
-			if instruction == 'LOAD_VALUE':
-				self.LOAD_VALUE(argument)
-			elif instruction == 'ADD_TWO_VALUES':
-				self.ADD_TWO_VALUES()
-			elif instruction == 'PRINT_ANSWER':
-				self.PRINT_ANSWER()
-			elif instruction == 'STORE_NAME':
-				self.STORE_NAME(argument)
-			elif instruction == 'LOAD_NAME':
-				self.LOAD_NAME(argument)
+			
+			bytecode_method = getattr(self, instruction)
+			if not argument:
+				bytecode_method()
+			else:
+				bytecode_method(argument)
 
 two_sum_executions = {
 	'instructions': [('LOAD_VALUE', 0),
