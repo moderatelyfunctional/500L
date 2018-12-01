@@ -1,3 +1,5 @@
+import dis
+
 from frame import Frame
 
 class VirtualMachineError(Exception):
@@ -49,6 +51,72 @@ class VirtualMachine(object):
 
 	def run_frame(self):
 		pass
+
+	def top(self):
+		return self.frame.stack[-1]
+
+	def pop(self):
+		return self.frame.stack.pop()
+
+	def push(self, *vals):
+		self.frame.stack.extend(vals)
+
+	def popn(self, n):
+		'''
+			Pops a number of values from the value stack.
+			A list of n values is returned, the deepest value first
+		'''
+		if n:
+			ret = self.frame.stack[-n:]
+			self.frame.stack[-n:] = []
+			return ret
+		else:
+			return []
+
+	def parse_byte_and_args(self):
+		f = self.frame
+		op_offset = f.last_instruction
+		bytecode = f.code_obj.co_code[op_offset]
+		f.last_instruction += 1
+		byte_name = dis.opname[bytecode]
+
+		if bytecode >= dis.HAVE_ARGUMENT:
+			# index into the bytecode
+			arg = f.code_obj.co_code[f.last_instruction:f.last_instruction + 2]
+			f.last_instruction += 2 # advance the instruction pointer
+			arg_val = arg[0] + (arg[1] * 256)
+			if bytecode in dis.hasconst:
+				arg = f.code_obj.co_consts[arg_val]
+			elif bytecode in dis.hasname:
+				arg = f.code_obj.co_names[arg_val]
+			elif bytecode in dis.haslocal:
+				arg = f.code_obj.co_varnames[arg_val]
+			elif bytecode in dis.hasjrel:
+				arg = f.last_instruction + arg_val
+			else:
+				arg = arg_val
+			argument = [arg]
+		else:
+			argument = []
+
+		return byte_name, argument
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 	def run_code(self, code, global_names = None, local_names = None):
 		''' An entry point to execute code with the virtual machine'''

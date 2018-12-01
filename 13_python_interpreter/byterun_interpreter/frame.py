@@ -13,5 +13,5 @@ class Frame(object):
 			if hasattr(self.builtin_names, '__dict__'):
 				self.builtin_names = self.builtin_names.__dict__
 
-		self.last_instruction = 0
+		self.last_instruction = 0			# represents the instruction pointer
 		self.block_stack = []
