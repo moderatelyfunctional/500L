@@ -1,5 +1,6 @@
 import dis
 
+from block import Block
 from frame import Frame
 
 class VirtualMachineError(Exception):
@@ -38,6 +39,8 @@ class VirtualMachine(object):
 		frame = Frame(code, global_names, local_names, self.frame)
 		return frame
 
+	# Data stack manipulations
+
 	def top(self):
 		return self.frame.stack[-1]
 
@@ -58,6 +61,65 @@ class VirtualMachine(object):
 			return ret
 		else:
 			return []
+
+	# Block stack manipulations
+
+	def push_block(self, b_type, handler = None):
+		stack_height = len(self.frame.stack)
+		self.frame.block_stack.append(Block(b_type, handler, stack_height))
+
+	def pop_block(self):
+		self.frame.block_stack.pop()
+
+	def unwind_block(self, block):
+		# Unwind the value on the data stack corresponding to a given block.
+		if block.type == 'except-handler':
+			# The exception itself is on the data stack as type, value, traceback
+			offset = 3
+		else:
+			offset = 0
+
+		while len(self.frame.stack) > block.level + offset:
+			self.pop()
+
+		if block.type == 'except-handler':
+			traceback, value, exctype = self.popn(3):
+			self.last_exception = exctype, value, traceback
+
+	def manage_block_stack(self, why):
+		frame = self.frame
+		block = frame.block_stack[-1]
+		if block.type == 'loop' and why == 'continue':
+			self.jump(self.return_value)
+			why = None
+			return why
+
+		self.pop_block()
+		self.unwind_block(block)
+
+		if block.type == 'loop' and why == 'break':
+			why = None
+			self.jump(block.handler)
+			return why
+
+		if (block.type in ['setup-except', 'finally']) and why == 'exception':
+			self.push_block('except-handler')
+			exctype, value, tb = self.last_exception
+			self.push(tb, value, exctype)
+			self.push(tb, value, exctype) # yes, twice
+			why = None
+			self.jump(block.handler)
+			return why
+
+		elif block.type == 'finally':
+			if why in ('return', 'continue'):
+				self.push(return_value)
+
+			self.push(why)
+			why = None
+			self.jump(block.handler)
+			return why
+		return why
 
 	def push_frame(self, frame):
 		self.frames.append(frame)
