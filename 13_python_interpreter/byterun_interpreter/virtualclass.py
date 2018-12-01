@@ -38,20 +38,6 @@ class VirtualMachine(object):
 		frame = Frame(code, global_names, local_names, self.frame)
 		return frame
 
-	def push_frame(self, frame):
-		self.frames.append(frame)
-		self.frame = frame
-
-	def pop_frame(self):
-		self.frames.pop()
-		if self.frames:
-			self.frame = self.frames[-1]
-		else:
-			self.frame = None
-
-	def run_frame(self):
-		pass
-
 	def top(self):
 		return self.frame.stack[-1]
 
@@ -72,6 +58,44 @@ class VirtualMachine(object):
 			return ret
 		else:
 			return []
+
+	def push_frame(self, frame):
+		self.frames.append(frame)
+		self.frame = frame
+
+	def pop_frame(self):
+		self.frames.pop()
+		if self.frames:
+			self.frame = self.frames[-1]
+		else:
+			self.frame = None
+
+	def run_frame(self):
+		'''
+			Run a frame until it returns
+			Exceptions are raised, the return value is returned.
+		'''
+		self.push_frame(frame)
+		while True:
+			byte_name, arguments = self.parse_byte_and_args()
+			why = self.dispatch(byte_name, arguments)
+
+			# Deal with any block management
+			while why and frame.block_stack:
+				why = self.manage_block_stack(why)
+
+			if why:
+				break
+
+		self.pop_frame()
+		
+		if why == 'exception':
+			exc, val, tb = self.last_exception
+			e = exc(val)
+			e.__traceback__ = tb
+			raise e
+
+		return self.return_value
 
 	def parse_byte_and_args(self):
 		f = self.frame
@@ -101,22 +125,28 @@ class VirtualMachine(object):
 
 		return byte_name, argument
 
+	def dispatch(self, byte_name, argument):
+		'''
+			Dispatch by byte_name to the corresponding methods.
+			Exceptions are caught and set on the virtual machine
+		'''
+		why = None
+		try:
+			bytecode_fn = getattr(self, 'byte_%s' % byte_name, None)
+			if not bytecode_fn:
+				if byte_name.startswith('UNARY_'):
+					self.unaryOperator(byte_name[6:])
+				elif byte_name.startswith('BINARY_'):
+					self.binaryOperator(byte_name[7:])
+				else:
+					raise VirtualMachineError('unsupported bytecode type %s' % byte_name)
+			else:
+				why = bytecode_fn(*argument)
+		except:
+			self.last_exception = sys.exc_info()[:2] + (None,)
+			why = 'exception'
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+		return why
 
 	def run_code(self, code, global_names = None, local_names = None):
 		''' An entry point to execute code with the virtual machine'''
